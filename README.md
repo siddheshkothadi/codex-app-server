@@ -1,6 +1,6 @@
-# codex-app-server (Node)
+# codex-app-server
 
-A simple Node.js server that bridges the Codex `app-server` stdio JSON-RPC interface to HTTP + Server-Sent Events (SSE).
+HTTP + SSE bridge for `codex app-server` (stdio JSON-RPC).
 
 ## Endpoints
 
@@ -10,17 +10,15 @@ A simple Node.js server that bridges the Codex `app-server` stdio JSON-RPC inter
 ## Environment Variables
 
 - `PORT` (default: `8080`)
-- `CODEX_HTTP_SECRET` (optional) — if set, requires `x-codex-secret` header to match
+- `CODEX_HTTP_SECRET` (optional) — if set, requires `x-codex-secret` header to match (disable with `--no-auth`)
 
 ## CLI
-
-Run:
 
 ```bash
 npx codex-app-server
 ```
 
-Note: this requires the `codex` executable to be on your `PATH` (or pass `--binary <path>`).
+This requires the `codex` executable to be on your `PATH` (or pass `--binary <path>`).
 
 Options:
 
@@ -28,3 +26,8 @@ Options:
 - `--port <n>` — overrides `PORT`
 - `--binary <path>` — overrides the `codex` executable (default: `codex`)
 - `-- <codex args...>` — overrides Codex args (default: `app-server`)
+
+## License
+
+MIT (see `LICENSE`).
+
