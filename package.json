@@ -1,0 +1,18 @@
+{
+  "name": "codex-app-server",
+  "version": "0.1.0",
+  "description": "HTTP + SSE bridge for `codex app-server` (stdio JSON-RPC).",
+  "license": "MIT",
+  "private": false,
+  "bin": {
+    "codex-app-server": "bin/codex-app-server.js"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node bin/codex-app-server.js",
+    "test": "node --test"
+  }
+}

@@ -1,30 +1,30 @@
-# codex-app-server
+# codex-app-server (Node)
 
-A simple Golang server that bridges the Codex app-server to HTTP. It wraps the standard input/output (stdin/stdout) communication of the underlying binary and exposes it via a RESTful API and Server-Sent Events (SSE).
-
-## Features
-
-- **JSON-RPC Bridge:** Forwards HTTP POST requests to the app-server.
-- **SSE Notifications:** Streams app-server notifications via `GET /events`.
-- **Security:** Optional shared secret authentication via `x-codex-secret` header.
+A simple Node.js server that bridges the Codex `app-server` stdio JSON-RPC interface to HTTP + Server-Sent Events (SSE).
 
 ## Endpoints
 
-### `POST /`
-Exposes the JSON-RPC interface. Send a JSON body with `method` and `params`.
-
-### `GET /events`
-Streams notifications from the app-server using Server-Sent Events (SSE).
+- `POST /` — JSON body: `{ "method": "...", "params": { ... } }`
+- `GET /events` — SSE stream of Codex notifications (messages without an `id`)
 
 ## Environment Variables
 
-- `PORT`: The port the server listens on (default: `8080`).
-- `CODEX_HTTP_SECRET`: (Optional) If set, requires the `x-codex-secret` header to match this value for all requests.
+- `PORT` (default: `8080`)
+- `CODEX_HTTP_SECRET` (optional) — if set, requires `x-codex-secret` header to match
 
-## Usage
+## CLI
 
-1. Ensure the `codex` binary is in your PATH.
-2. Run the server:
-   ```bash
-   go run cmd/server/main.go
-   ```
+Run:
+
+```bash
+npx codex-app-server
+```
+
+Note: this requires the `codex` executable to be on your `PATH` (or pass `--binary <path>`).
+
+Options:
+
+- `--no-auth` — disables `CODEX_HTTP_SECRET` checks
+- `--port <n>` — overrides `PORT`
+- `--binary <path>` — overrides the `codex` executable (default: `codex`)
+- `-- <codex args...>` — overrides Codex args (default: `app-server`)
