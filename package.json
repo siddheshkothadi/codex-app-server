@@ -1,6 +1,6 @@
 {
   "name": "codex-app-server",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "WS (default) or HTTP+SSE bridge for `codex app-server` (stdio JSON-RPC).",
   "license": "MIT",
   "private": false,
@@ -13,11 +13,17 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "postinstall": "npm run build",
+    "prepack": "npm run build",
     "start": "node bin/codex-app-server.js",
     "pretest": "npm run build",
     "test": "node --test"
   },
+  "files": [
+    "bin/",
+    "dist/",
+    "LICENSE",
+    "README.md"
+  ],
   "dependencies": {
     "ws": "^8.18.3"
   },

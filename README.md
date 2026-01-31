@@ -36,6 +36,11 @@ Options:
 - `--binary <path>` — overrides the `codex` executable (default: `codex`)
 - `-- <codex args...>` — overrides Codex args (default: `app-server`)
 
+## Development
+
+- `npm run build` compiles `src/` to `dist/`.
+- Published installs (including `npm i -g codex-app-server`) use the prebuilt `dist/` and do not require `typescript` at install time.
+
 ## License
 
 MIT (see `LICENSE`).
