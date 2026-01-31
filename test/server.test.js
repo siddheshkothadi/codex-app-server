@@ -3,6 +3,19 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
+const net = require("node:net");
+
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref?.();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
 
 function waitForLine(stream, predicate, { timeoutMs = 5000 } = {}) {
   return new Promise((resolve, reject) => {
@@ -38,6 +51,8 @@ function waitForLine(stream, predicate, { timeoutMs = 5000 } = {}) {
 async function startBridge({ port, secret }) {
   const args = [
     "bin/codex-app-server.js",
+    "--protocol",
+    "sse",
     "--port",
     String(port),
     "--binary",
@@ -57,7 +72,7 @@ async function startBridge({ port, secret }) {
   child.stdout.setEncoding("utf8");
   child.stderr.setEncoding("utf8");
 
-  await waitForLine(child.stdout, (line) => line.includes(`HTTP server listening on :${port}`), { timeoutMs: 8000 });
+  await waitForLine(child.stdout, (line) => line.includes(`HTTP server listening on :${port}`), { timeoutMs: 20000 });
 
   const baseUrl = `http://127.0.0.1:${port}`;
 
@@ -103,7 +118,7 @@ async function readSseData(reader, { timeoutMs = 5000 } = {}) {
 }
 
 test("POST / forwards JSON-RPC to app-server", async () => {
-  const bridge = await startBridge({ port: 18080, secret: "" });
+  const bridge = await startBridge({ port: await getFreePort(), secret: "" });
   try {
     const resp = await fetch(`${bridge.baseUrl}/`, {
       method: "POST",
@@ -120,7 +135,7 @@ test("POST / forwards JSON-RPC to app-server", async () => {
 });
 
 test("GET /events streams notifications via SSE", async () => {
-  const bridge = await startBridge({ port: 18081, secret: "" });
+  const bridge = await startBridge({ port: await getFreePort(), secret: "" });
   const controller = new AbortController();
 
   try {
@@ -155,7 +170,7 @@ test("GET /events streams notifications via SSE", async () => {
 });
 
 test("shared secret blocks requests without header", async () => {
-  const bridge = await startBridge({ port: 18082, secret: "shh" });
+  const bridge = await startBridge({ port: await getFreePort(), secret: "shh" });
   try {
     const resp = await fetch(`${bridge.baseUrl}/`, {
       method: "POST",
@@ -170,6 +185,114 @@ test("shared secret blocks requests without header", async () => {
       body: JSON.stringify({ method: "echo", params: { a: 1 } }),
     });
     assert.equal(ok.status, 200);
+  } finally {
+    await bridge.stop();
+  }
+});
+
+async function startBridgeWs({ port, secret }) {
+  const args = [
+    "bin/codex-app-server.js",
+    "--protocol",
+    "ws",
+    "--port",
+    String(port),
+    "--binary",
+    process.execPath,
+    "--",
+    "scripts/mock-codex.js",
+  ];
+
+  const env = { ...process.env, PORT: "", CODEX_HTTP_SECRET: secret || "" };
+
+  const child = spawn(process.execPath, args, {
+    cwd: `${__dirname}/..`,
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+
+  await waitForLine(child.stdout, (line) => line.includes(`HTTP server listening on :${port}`), { timeoutMs: 20000 });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  return {
+    baseUrl,
+    child,
+    stop: async () => {
+      child.kill("SIGINT");
+      await waitForLine(child.stdout, (line) => line.includes("shutting down HTTP server"), { timeoutMs: 3000 }).catch(() => {});
+      child.kill("SIGKILL");
+    },
+  };
+}
+
+test("WS forwards calls and notifications", async () => {
+  const port = await getFreePort();
+  const bridge = await startBridgeWs({ port, secret: "" });
+  try {
+    assert.ok(globalThis.WebSocket, "missing global WebSocket");
+
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/`);
+
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("timeout waiting for ws open")), 15000);
+      timeout.unref?.();
+      ws.addEventListener("open", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      ws.addEventListener("error", reject);
+    });
+
+    const queue = [];
+    let notify = null;
+    ws.addEventListener("message", (ev) => {
+      queue.push(ev);
+      notify?.();
+    });
+
+    async function nextMessage(timeoutMs = 15000) {
+      const deadline = Date.now() + timeoutMs;
+      while (queue.length === 0) {
+        const remaining = Math.max(0, deadline - Date.now());
+        if (remaining === 0) throw new Error("timeout waiting for ws message");
+        await new Promise((resolve) => {
+          const t = setTimeout(resolve, Math.min(250, remaining));
+          t.unref?.();
+          notify = resolve;
+        });
+        notify = null;
+      }
+      return queue.shift();
+    }
+
+    ws.send(JSON.stringify({ id: 1, method: "echo", params: { a: 1 } }));
+    while (true) {
+      const ev = await nextMessage(15000);
+      const msg = JSON.parse(typeof ev.data === "string" ? ev.data : Buffer.from(ev.data).toString("utf8"));
+      if (msg.id === 1) {
+        assert.deepEqual(msg.result, { a: 1 });
+        break;
+      }
+    }
+
+    ws.send(JSON.stringify({ id: 2, method: "triggerNotification" }));
+
+    const deadline = Date.now() + 5000;
+    while (true) {
+      const ev = await nextMessage(Math.max(250, deadline - Date.now()));
+      const msg = JSON.parse(typeof ev.data === "string" ? ev.data : Buffer.from(ev.data).toString("utf8"));
+      if (msg.method === "mock/notification") {
+        assert.deepEqual(msg.params, { hello: "world" });
+        break;
+      }
+      if (Date.now() > deadline) throw new Error("timeout waiting for mock/notification");
+    }
+
+    ws.close();
   } finally {
     await bridge.stop();
   }
