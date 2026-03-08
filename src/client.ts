@@ -105,6 +105,9 @@ export class AppServerClient {
         title: "Codex HTTP Bridge",
         version: "0.1.0",
       },
+      capabilities: {
+        experimentalApi: true,
+      },
     };
 
     await this.call("initialize", initParams, { signal });
@@ -200,6 +203,16 @@ export class AppServerClient {
     this.writeJsonLine(msg);
   }
 
+  sendResponse(id: number | string, result: unknown): void {
+    if (!this.stdin) throw new Error("client not started");
+    this.writeJsonLine({ id, result });
+  }
+
+  sendErrorResponse(id: number | string, error: unknown): void {
+    if (!this.stdin) throw new Error("client not started");
+    this.writeJsonLine({ id, error });
+  }
+
   close(): void {
     if (this.stopping) return;
     this.stopping = true;
@@ -280,8 +293,8 @@ export class AppServerClient {
       if (entry) {
         this.pending.delete(id);
         entry.resolve(Buffer.from(lineBuf));
+        return;
       }
-      return;
     }
 
     for (const [subId, cb] of this.subscribers.entries()) {
@@ -296,4 +309,3 @@ export class AppServerClient {
     this.logger.info(`notification: ${lineBuf.toString("utf8")}`);
   }
 }
-

@@ -162,7 +162,7 @@ export async function startServer({
       }
     });
 
-    server.on("close", () => unsubscribe());
+    server.once("close", unsubscribe);
 
     server.on("upgrade", (req, socket, head) => {
       if (!isAuthorized(req, secret)) {
@@ -181,10 +181,26 @@ export async function startServer({
           } catch {
             return;
           }
-          if (!env || typeof env.method !== "string" || !env.method) return;
+          if (!env || typeof env !== "object") return;
+
+          const hasId = Object.prototype.hasOwnProperty.call(env, "id") && env.id !== null && env.id !== undefined;
+          const hasMethod = typeof env.method === "string" && env.method.length > 0;
+
+          if (hasId && !hasMethod) {
+            try {
+              if (Object.prototype.hasOwnProperty.call(env, "result")) {
+                client.sendResponse(env.id, env.result);
+              } else if (Object.prototype.hasOwnProperty.call(env, "error")) {
+                client.sendErrorResponse(env.id, env.error);
+              }
+            } catch {}
+            return;
+          }
+
+          if (!hasMethod) return;
 
           // notification
-          if (!Object.prototype.hasOwnProperty.call(env, "id") || env.id === null || env.id === undefined) {
+          if (!hasId) {
             try {
               await client.notify(env.method, Object.prototype.hasOwnProperty.call(env, "params") ? env.params : undefined);
             } catch {}
@@ -217,8 +233,15 @@ export async function startServer({
   }
 
   await new Promise<void>((resolve, reject) => {
-    server.on("error", reject);
-    server.listen(port, () => resolve());
+    const onError = (error: Error) => {
+      server.off("error", onError);
+      reject(error);
+    };
+    server.once("error", onError);
+    server.listen(port, () => {
+      server.off("error", onError);
+      resolve();
+    });
   });
 
   logger.info(`HTTP server listening on :${port}`);
